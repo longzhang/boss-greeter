@@ -1,0 +1,35 @@
+[project]
+name = "boss-greeter"
+version = "0.1.0"
+description = "BOSS 直聘自动打招呼 agent：规则筛岗 + LLM 生成个性化招呼语"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.40",
+    "openai>=1.60",
+    "pydantic>=2.9",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "typer>=0.15",
+    "rich>=13.9",
+    "patchright>=1.62.3",
+    # 本机常开的代理（Clash 等）会把 all_proxy 设成 socks5://，httpx 少了它直接
+    # ImportError，连客户端都建不起来。装上只是让 SOCKS 可用，不代表一定走代理。
+    "socksio>=1.0",
+]
+
+[project.scripts]
+boss = "boss_greeter.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8.3"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/boss_greeter"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

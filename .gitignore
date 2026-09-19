@@ -1,0 +1,13 @@
+data/
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+config.local.yaml
+resume.md
+*.local.yaml
+*.swp
+*.swo
+*~
+.DS_Store

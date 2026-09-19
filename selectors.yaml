@@ -1,0 +1,135 @@
+# BOSS 直聘 DOM 选择器。改版失效时只改这个文件，不动代码。
+# 每个字段是一个候选列表，按顺序尝试，第一个命中的生效。
+# 用 `uv run boss doctor` 自检哪些失效，用 `uv run boss dump` 存一份真实 HTML 对照。
+
+login:
+  # 出现其一即认为已登录
+  logged_in:
+    - ".nav-figure"
+    - ".user-nav .figure"
+    - "[ck-id='geekNavAvatar']"
+    - ".nav-user-inner"
+  # 出现其一即认为在登录页（未登录）
+  login_page:
+    - ".sign-form"
+    - ".login-qr"
+    - ".qr-img-box"
+  # 二维码图片本身。等不到它就说明登录页没渲染出来，别让用户对着空白页干等
+  qr:
+    - ".qr-img-box img"
+    - ".login-qr img"
+    - ".sign-form img[src^='data:image']"
+    - ".qr-img img"
+    - "canvas"
+  # 二维码失效后的遮罩（提示用户点一下刷新，不自动点）
+  qr_expired:
+    - ".qr-expired"
+    - ".expired-mask"
+    - ".qr-img-box .mask"
+
+list:
+  # 以下 list.* 只在「接口兜底」路径上用得到：正常情况下列表数据取自
+  # /wapi/zpgeek/search/joblist.json（见 scraper.py），不解析卡片 DOM。
+  # 卡片容器
+  card:
+    - "li.job-card-box"
+    - "ul.job-list-box > li"
+    - "li.job-card-wrapper"
+  # 以下选择器均在单张卡片内部相对查找
+  title:
+    - ".job-name"
+    - ".job-title .job-name"
+  link:
+    - ".job-name"            # .job-name 本身就是 a 标签
+    - "a[href*='job_detail']"
+    - "a.job-card-left"
+  # 注意：页面上的薪资是自定义字体密文（U+E0xx 私有码点），取到的字符串解析不出数字。
+  # 明文只在接口里有。这一条留着只为 doctor 能看出卡片结构是否还在。
+  salary:
+    - ".job-salary"
+    - ".salary"
+  area:
+    - ".company-location"
+    - ".job-area"
+  # 经验/学历标签（多个 li）
+  tags:
+    - ".tag-list li"
+    - ".job-info .tag-list li"
+  company:
+    - ".boss-name"           # 卡片底部那个链到 /gongsi/ 的公司名
+    - ".company-name a"
+    - ".company-name"
+  # HR 在线标记。离线的卡片上没有这个节点，doctor 偶尔显示失效是正常的。
+  activity:
+    - ".boss-online-tag"
+    - ".boss-online-icon"
+
+detail:
+  # JD 正文
+  jd:
+    - ".job-sec-text"
+    - ".job-detail-section .job-sec-text"
+    - ".job-detail .text"
+  # 「立即沟通」按钮
+  chat_button:
+    - "a.btn.btn-startchat"
+    - ".btn-startchat"
+    - "a:has-text('立即沟通')"
+    - "button:has-text('立即沟通')"
+  # 岗位名（详情页，用于校验页面加载正确）
+  title:
+    - ".job-banner .name h1"
+    - ".job-name"
+    - ".name h1"
+
+chat:
+  # 消息输入框（弹窗或独立聊天页）
+  input:
+    - "#chat-input"
+    - ".chat-input"
+    - "div[contenteditable='true']"
+    - "textarea.input-area"
+  # 发送按钮（也可能直接回车发送）
+  send_button:
+    - ".btn-send"
+    - "button:has-text('发送')"
+    - ".chat-op .btn-v2"
+  # 点「立即沟通」后弹出的确认框文案。命中即说明平台已经把打招呼语发出去了——
+  # 这条路径不会打开聊天面板，所以气泡选择器在详情页上永远命中不了。
+  sent_dialog_texts:
+    - "已向BOSS发送消息"
+    - "已向Boss发送消息"
+    - "消息已发送"
+  # 确认框上「留在此页」按钮：点掉弹窗，别让它盖住后续操作。
+  # 注意不要点成「继续沟通」——那个会跳去聊天页。
+  stay_button:
+    - "button:has-text('留在此页')"
+    - ".btn:has-text('留在此页')"
+  # 确认框上「继续沟通」按钮：自定义招呼语那条路要靠它跳进聊天页再补发一条。
+  continue_button:
+    - ".dialog-container button:has-text('继续沟通')"
+    - ".boss-dialog button:has-text('继续沟通')"
+  # 已经沟通过的岗位，按钮文案会从「立即沟通」变成「继续沟通」
+  already_chatted:
+    - "a:has-text('继续沟通')"
+    - "button:has-text('继续沟通')"
+  # 发送成功后自己的消息气泡
+  sent_bubble:
+    - ".message-item.item-myself .text"
+    - ".item-myself .text"
+    - ".chat-message .myself"
+  # 风控/上限提示文案所在容器
+  limit_notice:
+    - ".dialog-container"
+    - ".boss-dialog"
+    - ".error-tip"
+
+# 风控文案关键词，命中任一立即熔断
+risk_texts:
+  - "今日沟通次数已达上限"
+  - "沟通次数已用完"
+  - "操作过于频繁"
+  - "访问过于频繁"
+  - "请稍后再试"
+  - "账号异常"
+  - "安全验证"
