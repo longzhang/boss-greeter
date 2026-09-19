@@ -134,8 +134,8 @@ filters:
 
 # ============ 招呼语 ============
 greeting:
-  # 指向你自己的简历（Markdown / 纯文本都行）
-  resume_path: "./resume.md"
+  # 指向你自己的简历（Markdown / 纯文本都行）。resume/ 整个目录已 gitignore
+  resume_path: "./resume/我的简历.md"
   # anthropic | openai（openai 也适用于任何 OpenAI 兼容的第三方网关）
   # 这里的 openai 是「说 OpenAI 那套协议」的意思；具体能用哪些模型，
   # 取决于 .env 里 OPENAI_BASE_URL 指的那个网关。

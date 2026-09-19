@@ -27,7 +27,8 @@ uv sync
 uv run patchright install chromium
 
 cp .env.example .env && vi .env        # 填模型凭据
-cp config.yaml config.local.yaml       # 改搜索词、筛选规则、简历路径
+cp config.yaml config.local.yaml       # 改搜索词、筛选规则（有它就优先用它）
+cp ~/你的简历.md resume/                # resume/ 整个目录已 gitignore
 
 uv run boss chrome                     # 启动带调试端口的 Chrome，在里面**手动**登录 BOSS
 uv run boss login                      # 确认登录态
@@ -216,7 +217,14 @@ uv run boss chrome     # 等价于下面这条命令，只是省得手敲
 ## 配置
 
 **`config.yaml`** —— 搜索词、城市、筛选规则、AI 判定、限速、简历路径。
-建议 `cp config.yaml config.local.yaml` 改副本，`.local.yaml` 已在 gitignore 里。
+
+**存在 `config.local.yaml` 就优先加载它**，没有才回落到 `config.yaml`。
+所以自己的配置写进 `config.local.yaml`（已 gitignore），仓库里那份当模板——
+`git pull` 不会跟你的本地改动打架。跑起来时会打一行 `配置：config.local.yaml`
+告诉你用的是哪份，免得改了半天没生效。
+
+**`resume/`** —— 放你自己的简历，整个目录已 gitignore，只有说明文件进仓库。
+简历里通常有手机号和邮箱，不该提交。
 
 **`selectors.yaml`** —— 所有 DOM 选择器。BOSS 前端改版频繁，这是这类工具最主要的
 失效来源，所以集中放这里，改版时不用动代码。每个字段是**候选列表**，

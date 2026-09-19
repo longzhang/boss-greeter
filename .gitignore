@@ -5,9 +5,12 @@ __pycache__/
 *.pyc
 .pytest_cache/
 config.local.yaml
-resume.md
 *.local.yaml
 *.swp
 *.swo
 *~
 .DS_Store
+
+# 简历是私人材料，目录里的内容都不提交，只留一份说明
+resume/*
+!resume/README.md

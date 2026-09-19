@@ -19,7 +19,9 @@ from .browser import (
     BOSS_HOME, CHAT_URL, LOGIN_URL, AttachFailed, attr_of, body_text, browser_context,
     chrome_launch_cmd, first_match, is_logged_in, page_of,
 )
-from .config import DB_PATH, LOG_DIR, PROJECT_ROOT, load_config, load_selectors
+from .config import (
+    DB_PATH, LOCAL_CONFIG, LOG_DIR, PROJECT_ROOT, config_path, load_config, load_selectors,
+)
 from .scraper import search_url
 from .store import Store
 
@@ -88,9 +90,17 @@ def _browser(cfg):
 
 def _load():
     try:
-        return load_config(), load_selectors()
+        cfg = load_config()
     except Exception as e:
-        console.print(f"[bold red]配置加载失败：[/]{e}")
+        console.print(f"[bold red]配置加载失败（{config_path().name}）：[/]{e}")
+        raise typer.Exit(1)
+    # 明说用的是哪份配置——两份并存时最容易「改了没生效」
+    if config_path().name == LOCAL_CONFIG:
+        console.print(f"[dim]配置：{LOCAL_CONFIG}[/]")
+    try:
+        return cfg, load_selectors()
+    except Exception as e:
+        console.print(f"[bold red]选择器加载失败：[/]{e}")
         raise typer.Exit(1)
 
 

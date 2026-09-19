@@ -251,8 +251,19 @@ class Selectors:
         yield from walk(self._raw, "")
 
 
+#: 有它就用它，没有才用 config.yaml。仓库里的 config.yaml 是模板，
+#: 各人的搜索词、简历路径、筛选口径写进 config.local.yaml（已 gitignore），
+#: 这样 git pull 不会跟你的本地配置打架。
+LOCAL_CONFIG = "config.local.yaml"
+
+
+def config_path() -> Path:
+    local = PROJECT_ROOT / LOCAL_CONFIG
+    return local if local.is_file() else PROJECT_ROOT / "config.yaml"
+
+
 def load_config(path: Path | None = None) -> Config:
-    path = path or PROJECT_ROOT / "config.yaml"
+    path = path or config_path()
     return Config(**yaml.safe_load(path.read_text(encoding="utf-8")))
 
 
