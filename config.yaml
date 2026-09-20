@@ -141,7 +141,7 @@ greeting:
   # 取决于 .env 里 OPENAI_BASE_URL 指的那个网关。
   provider: "openai"
   # 模型名以网关认的为准（curl <网关>/v1/models 可列）。
-  model: "gpt-5.6-sol"
+  model: "kimi-k3"
   min_chars: 60
   max_chars: 200
   # LLM 连续失败或校验不过时的兜底模板
@@ -164,7 +164,7 @@ ai_screen:
 
 # ============ 限速与熔断 ============
 pacing:
-  daily_limit: 50           # 每日打招呼硬上限（平台实际约 100）
+  daily_limit: 93           # 每日打招呼硬上限（平台实际约 100，留 7 条余量给手动沟通）
   action_delay: [2.0, 5.0]  # 单步操作间隔随机区间（秒）：翻页、点详情页这类
   # 两次「发送」之间的间隔。这条是规避机器人验证的主要手段——
   # 用模型写招呼语时每个岗位本来要等十几秒到一分钟，节奏自然就慢；

@@ -142,7 +142,7 @@ class AiScreenConfig(BaseModel):
 
 
 class PacingConfig(BaseModel):
-    daily_limit: int = 50
+    daily_limit: int = 93
     action_delay: tuple[float, float] = (3.0, 8.0)
     #: 两次「发送」之间的间隔，比 action_delay 长得多。
     #: 用模型写招呼语时每个岗位本来就要等十几秒到一分钟，无形中拉开了节奏；
