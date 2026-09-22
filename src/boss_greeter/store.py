@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS greetings (
     job_id   TEXT PRIMARY KEY,
     message  TEXT NOT NULL,
     model    TEXT,
-    status   TEXT NOT NULL,       -- sent | failed | dry_run
+    status   TEXT NOT NULL,       -- sent | already | failed | dry_run | skipped
     reason   TEXT,
     sent_at  TEXT NOT NULL
 );
@@ -98,9 +98,15 @@ class Store:
     # ------------------------------------------------------------ 招呼语
 
     def is_greeted(self, job_id: str) -> bool:
-        """只有真正发出去的才算打过招呼。dry_run / failed 不挡住后续重试。"""
+        """打过招呼就不再投。dry_run / failed 不挡住后续重试。
+
+        'already' 也算打过——它是详情页按钮已经是「继续沟通」，说明这个 HR
+        之前就聊过了（本工具发的，或你自己手动发的）。不挡住的话每轮都会
+        重新进详情页、重新点一次，纯属白跑。
+        """
         row = self.conn.execute(
-            "SELECT 1 FROM greetings WHERE job_id = ? AND status = 'sent'", (job_id,)
+            "SELECT 1 FROM greetings WHERE job_id = ? AND status IN ('sent', 'already')",
+            (job_id,),
         ).fetchone()
         return row is not None
 

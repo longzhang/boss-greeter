@@ -258,6 +258,14 @@ def _loop(ctx, page, cfg, sel, store, pacer, greeter, card_chain, jd_chain,
                 store.save_greeting(Greeting(job.job_id, message, model, "sent"))
                 console.print(f"  [bold green]✓ 已发送[/]　今日 {pacer.sent_today + 1}/{cfg.pacing.daily_limit}")
                 pacer.after_send()
+            elif result.already:
+                # 早就打过招呼了，不是发送失败。计入熔断的话，连着遇上三个
+                # 老岗位就会把整轮打断，而一条消息都没真的发失败过。
+                stats.skipped += 1
+                store.save_greeting(
+                    Greeting(job.job_id, message, model, "already", result.reason)
+                )
+                console.print(f"  [dim]⇢ 跳过：{result.reason}[/]")
             else:
                 stats.failed += 1
                 store.save_greeting(Greeting(job.job_id, message, model, "failed", result.reason))

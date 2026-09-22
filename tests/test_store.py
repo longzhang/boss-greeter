@@ -59,3 +59,12 @@ def test_run_lifecycle(store):
     run = store.recent_runs(1)[0]
     assert run["scanned"] == 10 and run["sent"] == 3
     assert run["stop_reason"] == "正常结束"
+
+
+def test_already_chatted_blocks_retry(store):
+    """详情页按钮已是「继续沟通」= 这个 HR 早聊过了。不挡住的话每轮都会
+    重新进详情页、重新点一次，白跑一趟还各记一次失败。"""
+    store.save_greeting(Greeting("j9", "", "default", "already", "之前已经沟通过"))
+    assert store.is_greeted("j9")
+    # 但不该算进今天的发送量——今天并没有真的发出去
+    assert store.sent_today() == 0

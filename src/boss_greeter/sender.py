@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -17,18 +18,30 @@ from .pacing import Circuit
 class SendResult:
     ok: bool
     reason: str = ""
+    #: 「之前已经沟通过」这类情况：招呼语其实早就发过了，不是平台拒绝我们。
+    #: 不该计入连续失败熔断——否则遇上三个老岗位就把整轮打断。
+    already: bool = False
 
 
 def _screenshot(page: Page, job_id: str, tag: str) -> str:
-    """出错时留证据，方便回头核对是选择器问题还是被风控了。"""
+    """出错时留证据：截图 + HTML。
+
+    截图能看出「长什么样」，但要写新选择器得有 DOM——BOSS 的发送确认 UI
+    已经改过两轮，每次都是靠这些现场文件才定位到新的判据。
+    """
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     path = LOG_DIR / f"{stamp}-{tag}-{job_id}.png"
     try:
         page.screenshot(path=str(path), full_page=False)
-        return str(path)
     except Exception:
-        return ""
+        path = None
+    try:
+        html = LOG_DIR / f"{stamp}-{tag}-{job_id}.html"
+        html.write_text(page.content(), encoding="utf-8")
+    except Exception:
+        pass
+    return str(path) if path else ""
 
 
 def _guard_risk(page: Page, sel: Selectors) -> None:
@@ -79,7 +92,8 @@ _DIALOG_WAIT_MS = 6000
 
 
 def send_default_greeting(
-    ctx: BrowserContext, page: Page, sel: Selectors, job: Job
+    ctx: BrowserContext, page: Page, sel: Selectors, job: Job,
+    wait_ms: float = _DIALOG_WAIT_MS,
 ) -> SendResult:
     """只点「立即沟通」，招呼语用你在 BOSS 里设好的那条。
 
@@ -91,15 +105,17 @@ def send_default_greeting(
     招呼语内容在 BOSS 的「消息通知-设置打招呼语」里改，本工具不参与。
     """
     if _already_chatted(page, sel):
-        return SendResult(False, "这个岗位之前已经沟通过（按钮是「继续沟通」）")
+        return SendResult(False, "这个岗位之前已经沟通过（按钮是「继续沟通」）", already=True)
 
     chat, err = _open_chat(ctx, page, sel, job)
     if chat is None:
         return SendResult(False, err)
 
-    # 确认框是异步弹的，轮询着等——比固定 sleep 稳，也比一次性检查宽容
-    deadline = _DIALOG_WAIT_MS
-    while deadline > 0:
+    # 确认信号是异步出现的，轮询着等——比固定 sleep 稳，也比一次性检查宽容。
+    # 用挂钟计时而不是累减固定步长：下面几个判据本身就要花几百毫秒，
+    # 累减的话真失败时会白等好几倍的时间。
+    deadline = time.monotonic() + wait_ms / 1000
+    while time.monotonic() < deadline:
         _guard_risk(chat, sel)
         if _sent_dialog(chat, sel):
             _dismiss_dialog(chat, sel)
@@ -109,8 +125,14 @@ def send_default_greeting(
         if _has_sent_bubble(chat, sel):
             _close_if_new_tab(chat, page)
             return SendResult(True)
-        chat.wait_for_timeout(500)
-        deadline -= 500
+        # 最稳的一条：进来前按钮是「立即沟通」（开头的 _already_chatted 已确认），
+        # 现在变成了「继续沟通」，说明平台已经把这次沟通记下了——招呼语必定发出去了。
+        # 这个判据不依赖确认 UI 长什么样，BOSS 改版时比认文案可靠。
+        if _already_chatted(page, sel):
+            _dismiss_dialog(chat, sel)
+            _close_if_new_tab(chat, page)
+            return SendResult(True)
+        chat.wait_for_timeout(300)
 
     _screenshot(chat, job.job_id, "no-sent-dialog")
     return SendResult(False, "点了沟通但没等到「已发送」确认框")
@@ -177,7 +199,7 @@ def send_greeting(
     页面必须已经停在 job.url 对应的详情页（fetch_jd 会把页面留在那里）。
     """
     if _already_chatted(page, sel):
-        return SendResult(False, "这个岗位之前已经沟通过（按钮是「继续沟通」）")
+        return SendResult(False, "这个岗位之前已经沟通过（按钮是「继续沟通」）", already=True)
 
     chat, err = _open_chat(ctx, page, sel, job)
     if chat is None:
