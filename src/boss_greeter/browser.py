@@ -248,8 +248,28 @@ def human_type(loc: Locator, text: str) -> None:
         loc.type(ch, delay=random.uniform(30, 110))
 
 
-def human_scroll(page: Page, times: int = 3) -> None:
-    """分几次往下滚，触发列表页懒加载。"""
-    for _ in range(times):
+def human_scroll(page: Page, times: int = 3, max_steps: int = 60) -> None:
+    """往下滚到接近页底，触发列表页懒加载。
+
+    这里必须滚「到底」而不是固定滚几次：列表每加载一页就长高约 2400px，而
+    固定 3 次滚轮只覆盖 1200-2700px。第 1→2 页刚好够（距底 1651px），
+    第 2→3 页就差一点点（距底 2384px，滚完还剩 241px），懒加载不触发，
+    翻页于是静默断在第 2 页——接口明说 hasMore=True 却再也拿不到数据。
+    结果是每个关键词只能抓到 30 个，max_pages 配 5 还是 10 都没区别。
+
+    `times` 保留为「至少滚几次」，即使已经到底也会滚这么多下，免得页面
+    没长高时一步都不动。max_steps 是防死循环的上限。
+    """
+    def left() -> float:
+        try:
+            return page.evaluate(
+                "() => document.body.scrollHeight - window.scrollY - window.innerHeight"
+            )
+        except Exception:
+            return 0.0
+
+    for i in range(max_steps):
         page.mouse.wheel(0, random.randint(400, 900))
-        page.wait_for_timeout(random.randint(300, 800))
+        page.wait_for_timeout(random.randint(150, 400))
+        if i + 1 >= times and left() <= 80:
+            break
