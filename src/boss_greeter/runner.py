@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import random
+import time
 from dataclasses import dataclass, field
 
 from patchright.sync_api import Error as PWError
@@ -12,7 +14,7 @@ from .config import DB_PATH, Config, Selectors
 from .filters import build_card_chain, build_jd_chain, run_chain
 from .greeter import Greeter
 from .models import FilterResult, Greeting, Job
-from .pacing import Circuit, Pacer
+from .pacing import Circuit, Pacer, QuotaReached
 from .scraper import fetch_jd, iter_jobs
 from .screener import Screener
 from .sender import send_default_greeting, send_greeting
@@ -49,6 +51,8 @@ class RunStats:
     #: 招呼语降级成模板、因而没有发出去的岗位数
     skipped: int = 0
     stop_reason: str = "正常结束"
+    #: 跑了几轮。非连续模式恒为 1。
+    rounds: int = 1
     reject_by_rule: dict[str, int] = field(default_factory=dict)
 
 
@@ -60,6 +64,7 @@ def run(
     limit: int | None = None,
     allow_fallback: bool = False,
     default_greeting: bool = False,
+    continuous: bool = False,
 ) -> RunStats:
     stats = RunStats()
 
@@ -102,13 +107,60 @@ def run(
                 if not is_logged_in(page, sel):
                     raise NotLoggedIn("未检测到登录态，请先运行：uv run boss login 确认")
 
-                _loop(ctx, page, cfg, sel, store, pacer, greeter,
-                      card_chain, jd_chain, stats, run_id, dry_run, limit, allow_fallback,
-                      default_greeting, screener)
+                empty_rounds = 0
+                while True:
+                    if continuous:
+                        console.rule(
+                            f"[bold]第 {stats.rounds} 轮[/]　"
+                            f"今日已发 {pacer.sent_today}/{cfg.pacing.daily_limit}"
+                        )
+                    sent_before = stats.sent
+                    _loop(ctx, page, cfg, sel, store, pacer, greeter,
+                          card_chain, jd_chain, stats, run_id, dry_run, limit, allow_fallback,
+                          default_greeting, screener)
+                    if not continuous:
+                        break
 
+                    gained = stats.sent - sent_before
+                    if pacer.remaining <= 0:
+                        stats.stop_reason = f"已用完每日上限 {cfg.pacing.daily_limit} 条，收工"
+                        break
+                    # 一轮把所有关键词都翻完了还是零，说明候选耗尽——再跑也是
+                    # 重扫同一批岗位，全被去重挡掉。等几轮新岗位没出来就收工。
+                    if gained == 0:
+                        empty_rounds += 1
+                        console.print(
+                            f"[dim]  本轮没有新岗位可投（连续 {empty_rounds} 轮）[/]"
+                        )
+                        if empty_rounds >= cfg.pacing.max_empty_rounds:
+                            stats.stop_reason = (
+                                f"连续 {empty_rounds} 轮没有新岗位可投，收工（"
+                                f"今日已发 {pacer.sent_today}/{cfg.pacing.daily_limit}）"
+                            )
+                            break
+                    else:
+                        empty_rounds = 0
+
+                    rest = random.uniform(*cfg.pacing.round_rest)
+                    console.print(
+                        f"[dim]  ⏸  本轮发出 {gained} 条，休息 {rest / 60:.0f} "
+                        f"分钟后跑下一轮（剩余配额 {pacer.remaining}）…[/]"
+                    )
+                    time.sleep(rest)
+                    stats.rounds += 1
+
+        except QuotaReached as e:
+            # 配额用完是正常收工，不是撞风控——别用熔断那套红色告警吓人
+            stats.stop_reason = f"{e}，收工"
+            console.print(f"\n[bold green]✓ {stats.stop_reason}[/]")
         except Circuit as e:
             stats.stop_reason = f"熔断：{e}"
             console.print(f"\n[bold red]⛔ {stats.stop_reason}[/]")
+            if continuous:
+                console.print(
+                    "[yellow]  连续模式已停。这是风控信号，今天别再跑了——"
+                    "先把 send_delay / hourly_limit 往回调。[/]"
+                )
         except ModelUnavailable as e:
             stats.stop_reason = str(e)
             console.print(

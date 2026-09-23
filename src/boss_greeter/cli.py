@@ -413,8 +413,12 @@ def run(
     default_greeting: bool = typer.Option(
         False, "--default-greeting", help="不生成招呼语，只点沟通、用 BOSS 自带的默认招呼语"
     ),
+    continuous: bool = typer.Option(
+        False, "--continuous", "-c",
+        help="一轮跑完不退出，休息一阵接着跑，直到用完每日上限、候选耗尽或撞上风控",
+    ),
 ):
-    """跑一轮：筛岗位 → 生成招呼语 → 打招呼。"""
+    """跑一轮：筛岗位 → 生成招呼语 → 打招呼。加 -c 则连续跑。"""
     from .runner import run as do_run  # 延迟导入，避免 stats/doctor 也去连 API
 
     cfg, sel = _load()
@@ -425,9 +429,31 @@ def run(
         allow_fallback = False
     if default_greeting:
         console.print("[dim]招呼语：平台默认（不调用模型）[/]")
+    if continuous and dry_run:
+        console.print(
+            "[bold red]--continuous 不能跟 --dry-run 一起用。[/]\n"
+            "  预演不写去重记录（只有真正发出去的才算打过招呼），"
+            "所以下一轮会把同一批岗位重新跑一遍，无限循环。"
+        )
+        raise typer.Exit(1)
+    if continuous and limit is not None:
+        console.print(
+            "[bold red]--continuous 不能跟 -n 一起用。[/]\n"
+            "  -n 是「本次最多处理多少个」，连续模式下每轮都会重新计数，"
+            "起不到限制总量的作用。要限总量请改 config 的 pacing.daily_limit。"
+        )
+        raise typer.Exit(1)
+    if continuous:
+        console.print(
+            f"[dim]连续模式：跑到用完每日上限 {cfg.pacing.daily_limit} 条为止。"
+            f"小时上限 {cfg.pacing.hourly_limit or '未设'} 条，"
+            f"轮间休息 {cfg.pacing.round_rest[0] / 60:.0f}-{cfg.pacing.round_rest[1] / 60:.0f} 分钟。"
+            f"　Ctrl+C 可随时中断[/]"
+        )
     stats = do_run(
         cfg, sel, dry_run=dry_run, limit=limit,
         allow_fallback=allow_fallback, default_greeting=default_greeting,
+        continuous=continuous,
     )
 
     console.rule("[bold]本轮结果[/]")
@@ -440,6 +466,8 @@ def run(
         table.add_row("预演生成", str(stats.dry_run))
     if stats.skipped:
         table.add_row("降级跳过", f"[yellow]{stats.skipped}[/]")
+    if stats.rounds > 1:
+        table.add_row("跑了几轮", str(stats.rounds))
     table.add_row("结束原因", stats.stop_reason)
     console.print(table)
 

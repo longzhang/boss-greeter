@@ -13,6 +13,14 @@ class Circuit(Exception):
     """熔断信号：调用方捕获后应立刻结束整轮，不再继续下一个岗位。"""
 
 
+class QuotaReached(Circuit):
+    """今日配额用完。
+
+    单独一个类型是为了让连续模式能区分「正常收工」和「撞上风控」——
+    前者该干净结束，后者必须立刻停手、当天别再跑。
+    """
+
+
 @dataclass
 class Pacer:
     """随机延迟 + 分批长休息 + 日上限 + 连续失败熔断。"""
@@ -22,6 +30,10 @@ class Pacer:
     _since_rest: int = 0
     _consecutive_failures: int = 0
     _next_rest_at: int = field(init=False)
+    #: 本进程内每次成功发送的时刻，只用于小时级速率闸门。
+    #: 注意它不跨进程——重启后这一小时的历史就丢了，所以连续模式比
+    #: 反复手动重跑更安全。
+    _sent_at: list[float] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self._next_rest_at = random.randint(*self.cfg.batch_size)
@@ -40,6 +52,8 @@ class Pacer:
         self.sent_today += 1
         self._since_rest += 1
         self._consecutive_failures = 0
+        self._sent_at.append(time.monotonic())
+        self._throttle_hourly()
         if self._since_rest >= self._next_rest_at:
             rest = random.uniform(*self.cfg.batch_rest)
             print(f"  ⏸  已连发 {self._since_rest} 条，休息 {rest / 60:.1f} 分钟…")
@@ -58,9 +72,30 @@ class Pacer:
 
     # ------------------------------------------------------------ 闸门
 
+    def _throttle_hourly(self) -> None:
+        """撞到小时上限就睡到最老的那一条滑出窗口。
+
+        放在 after_send 里而不是发送前：效果一样（都是拉开下一条），
+        但不用在调用方再插一个闸门。
+        """
+        limit = self.cfg.hourly_limit
+        if not limit:
+            return
+        now = time.monotonic()
+        self._sent_at = [t for t in self._sent_at if now - t < 3600]
+        if len(self._sent_at) < limit:
+            return
+        wait = 3600 - (now - self._sent_at[0]) + 1
+        if wait > 0:
+            print(
+                f"  ⏸  近一小时已发 {len(self._sent_at)} 条（上限 {limit}），"
+                f"等 {wait / 60:.0f} 分钟再继续…"
+            )
+            time.sleep(wait)
+
     def check_quota(self) -> None:
         if self.sent_today >= self.cfg.daily_limit:
-            raise Circuit(f"已达每日上限 {self.cfg.daily_limit} 条")
+            raise QuotaReached(f"已达每日上限 {self.cfg.daily_limit} 条")
 
     def after_failure(self, detail: str = "") -> None:
         self._consecutive_failures += 1

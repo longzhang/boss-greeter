@@ -151,6 +151,16 @@ class PacingConfig(BaseModel):
     batch_size: tuple[int, int] = (5, 8)
     batch_rest: tuple[float, float] = (300.0, 900.0)
     max_consecutive_failures: int = 3
+    #: 小时级速率上限（条/小时）。0 = 关闭。
+    #: 这是最该守住的一条：实测一小时 42 条被强制登出，是**频率**被风控盯上，
+    #: 不是总量。一轮跑完就退出时天然分了段；连续模式没有这个天然间隔，
+    #: 必须显式封顶，否则会一路以 60+/小时撞上去。
+    hourly_limit: int = 30
+    #: 连续模式下两轮之间的休息区间（秒）。默认 15-30 分钟——
+    #: 歇太短的话下一轮重扫到的还是同一批岗位，全被去重挡掉，纯空转。
+    round_rest: tuple[float, float] = (900.0, 1800.0)
+    #: 连续多少轮没有新岗位可投就收工。候选耗尽时别无限转下去。
+    max_empty_rounds: int = 2
 
 
 class BrowserConfig(BaseModel):
